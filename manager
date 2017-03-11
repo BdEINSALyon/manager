@@ -1,0 +1,20 @@
+#!/bin/bash -e
+
+BASEDIR=`dirname $0`
+
+if [ ! -d "$BASEDIR/.venv" ]; then
+    virtualenv -p python3 $BASEDIR/.venv
+    echo "# Virtualenv for Manager created"
+fi
+
+source $BASEDIR/.venv/bin/activate
+cd $BASEDIR
+export PYTHONPATH=.
+
+if [ ! -f "$BASEDIR/.venv/updated" -o $BASEDIR/requirements.pip -nt $BASEDIR/.venv/updated ]; then
+    echo "# Installing requirements ..."
+    pip install --upgrade pip > /dev/null
+    pip install -r $BASEDIR/requirements.txt > /dev/null
+    touch $BASEDIR/.venv/updated
+    echo "# Requirements installed."
+fi
