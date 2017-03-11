@@ -11,10 +11,12 @@ source $BASEDIR/.venv/bin/activate
 cd $BASEDIR
 export PYTHONPATH=.
 
-if [ ! -f "$BASEDIR/.venv/updated" -o $BASEDIR/requirements.pip -nt $BASEDIR/.venv/updated ]; then
+if [ ! -f "$BASEDIR/.venv/updated" -o $BASEDIR/requirements.txt -nt $BASEDIR/.venv/updated ]; then
     echo "# Installing requirements ..."
     pip install --upgrade pip > /dev/null
     pip install -r $BASEDIR/requirements.txt > /dev/null
     touch $BASEDIR/.venv/updated
     echo "# Requirements installed."
 fi
+
+python manager.py "$@"
