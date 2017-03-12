@@ -18,7 +18,7 @@ from docopt import docopt
 
 import nginx
 
-logger = logging.getLogger()
+logger = logging.getLogger('manager')
 logger.setLevel(logging.DEBUG)
 
 ch = logging.StreamHandler(sys.stdout)

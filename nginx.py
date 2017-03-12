@@ -4,6 +4,10 @@ from shutil import copytree
 
 import docker as d
 import logging
+
+import shutil
+
+import subprocess
 from docker.errors import APIError, ContainerError
 
 docker = d.from_env()
@@ -48,20 +52,66 @@ class NginxManager(object):
             raise
 
     def add_host(self, domain, docker_container_name, docker_port, app_name, use_ssl=True):
-        if use_ssl:
-            model = os.path.join(
-                os.path.dirname(os.path.realpath(__file__)),
-                'nginx_templates/443-preauthorization-host.conf'
-            )
-        else:
-            model = os.path.join(
-                os.path.dirname(os.path.realpath(__file__)),
-                'nginx_templates/80-host.conf'
+        if not self._has_conf(app_name):
+            if use_ssl:
+                model = '443-preauthorization-host'
+                if shutil.which('certbot-auto') is None:
+                    raise RuntimeError('Certbot is not found on that system!')
+            else:
+                model = '80-host'
+
+            self._write_conf(
+                app_name, model,
+                domain=domain, docker_container_name=docker_container_name, app_name=app_name, docker_port=docker_port
             )
 
-        with open('data.txt', 'r') as myfile:
-            data = myfile.read().replace('\n', '')
+            docker.containers.get(self.container).exec('nginx -s reload')
+
+            if use_ssl:
+                # Configure SSL
+                command = "certbot-auto certonly -a webroot --webroot-path=/var/www/letsencrypt -d {}"
+                command.format(domain)
+                command = command.split(' ')
+                with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE) as c:
+                    c.wait()
+                    logging.getLogger('manager').debug(c.stdout.read())
+                    logging.getLogger('manager').info(c.stderr.read())
+                self._write_conf(
+                    app_name, '443-host',
+                    domain=domain, docker_container_name=docker_container_name, app_name=app_name,
+                    docker_port=docker_port
+                )
+
+            docker.containers.get(self.container).exec('nginx -s reload')
+        else:
+            if use_ssl:
+                model = '443-host'
+            else:
+                model = '80-host'
+            self._write_conf(
+                app_name, model,
+                domain=domain, docker_container_name=docker_container_name, app_name=app_name, docker_port=docker_port
+            )
+            docker.containers.get(self.container).exec('nginx -s reload')
 
     def _write_conf(self, name, source, **args):
-        pass
+        path = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)),
+            'nginx_templates/{}.conf'.format(source)
+        )
+        with open(path, 'r') as model:
+            data = model.read().replace('\n', '')
+            for key, value in args:
+                data = data.replace('%{}%'.format(key), value)
+        destination = os.path.join(
+            self.folder,
+            'managed-hosts/{}.conf'.format(name)
+        )
+        with open(destination, 'w') as configuration:
+            configuration.write(data)
 
+    def _has_conf(self, name):
+        return os.path.exists(os.path.join(
+            self.folder,
+            'managed-hosts/{}.conf'.format(name)
+        ))
