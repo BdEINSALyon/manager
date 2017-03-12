@@ -17,6 +17,10 @@ class NginxManager(object):
     def __init__(self, nginx_container='nginx', configuration_folder='/var/conf/nginx'):
         self.container = nginx_container
         self.folder = configuration_folder
+        self.has_certbot = shutil.which('certbot-auto') is None
+        if not self.has_certbot:
+            logging.getLogger('manager').critical(
+                'No HTTPS support on that system because we have not cerbot installed')
         self._check_and_setup()
 
     def _check_and_setup(self):
@@ -44,6 +48,7 @@ class NginxManager(object):
                 restart_policy={'Name': 'always'},
                 volumes={
                     '/var/www': {'bind': '/var/www', 'mode': 'ro'},
+                    '/etc/letsencrypt/live/': {'bind': '/etc/letsencrypt/live/', 'mode': 'ro'},
                     self.folder: {'bind': '/etc/nginx', 'mode': 'ro'},
                 }
             )
@@ -51,48 +56,58 @@ class NginxManager(object):
             logging.getLogger('manager').error('Can not setup Docker container')
             raise
 
-    def add_host(self, domain, docker_container_name, docker_port, app_name, use_ssl=True):
-        if not self._has_conf(app_name):
-            if use_ssl:
-                model = '443-preauthorization-host'
-                if shutil.which('certbot-auto') is None:
-                    raise RuntimeError('Certbot is not found on that system!')
-            else:
-                model = '80-host'
+    def register_host(self, domain, docker_container_name, docker_port, app_name, use_ssl=True):
 
-            self._write_conf(
-                app_name, model,
-                domain=domain, docker_container_name=docker_container_name, app_name=app_name, docker_port=docker_port
-            )
+        # Handle no certbot issue
+        if not self.has_certbot:
+            logging.getLogger('manager').error('Will deploy {} without SSL because we don\'t have certbot')
+            use_ssl = False
 
-            docker.containers.get(self.container).exec('nginx -s reload')
+        # Remove old configuration if it exists
+        if self._has_conf(app_name):
+            self._clear_conf(app_name)
 
-            if use_ssl:
-                # Configure SSL
-                command = "certbot-auto certonly -a webroot --webroot-path=/var/www/letsencrypt -d {}"
-                command.format(domain)
-                command = command.split(' ')
-                with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE) as c:
-                    c.wait()
-                    logging.getLogger('manager').debug(c.stdout.read())
-                    logging.getLogger('manager').info(c.stderr.read())
-                self._write_conf(
-                    app_name, '443-host',
-                    domain=domain, docker_container_name=docker_container_name, app_name=app_name,
-                    docker_port=docker_port
-                )
-
-            docker.containers.get(self.container).exec('nginx -s reload')
+        # Select the most appropriate model
+        if use_ssl:
+            model = '443-preauthorization-host'
         else:
-            if use_ssl:
-                model = '443-host'
-            else:
-                model = '80-host'
-            self._write_conf(
-                app_name, model,
-                domain=domain, docker_container_name=docker_container_name, app_name=app_name, docker_port=docker_port
-            )
-            docker.containers.get(self.container).exec('nginx -s reload')
+            model = '80-host'
+
+        # Write configuration for the host
+        self._write_site_config(app_name, docker_container_name, docker_port, domain, model)
+
+        # Reload Nginx
+        self._reload()
+
+        # If needed, configure SSL
+        if use_ssl:
+            # Issue the certificate
+            self._cerbot(domain)
+            # Write host configuration to use the new SSL certificate
+            self._write_site_config(app_name, docker_container_name, docker_port, domain, '443-host')
+            # Reload to apply edits
+            self._reload()
+
+    def _clear_conf(self, app_name):
+        os.remove(os.path.join(self.folder, 'managed-hosts/{}.conf'.format(app_name)))
+
+    def _cerbot(self, domain):
+        command = "certbot-auto certonly -a webroot --webroot-path=/var/www/letsencrypt -d {}"
+        command.format(domain)
+        command = command.split(' ')
+        with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE) as c:
+            c.wait()
+            logging.getLogger('manager').debug(c.stdout.read())
+            logging.getLogger('manager').info(c.stderr.read())
+
+    def _write_site_config(self, app_name, docker_container_name, docker_port, domain, model):
+        self._write_conf(
+            app_name, model,
+            domain=domain, docker_container_name=docker_container_name, app_name=app_name, docker_port=docker_port
+        )
+
+    def _reload(self):
+        docker.containers.get(self.container).exec_run('nginx -s reload')
 
     def _write_conf(self, name, source, **args):
         path = os.path.join(
