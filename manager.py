@@ -18,6 +18,8 @@ from docopt import docopt
 
 import nginx
 
+import postgres
+
 logger = logging.getLogger('manager')
 logger.setLevel(logging.DEBUG)
 
@@ -45,6 +47,12 @@ class Manager(object):
     def setup(domain):
         logger.info("Setup a new managed server {}".format(domain))
         nginx_manager = nginx.NginxManager()
+        postgres_manager = postgres.PostgresManager()
+        os.mkdir('/var/conf/manager')
+        if not os.path.exists('/var/www/html/index.html'):
+            os.makedirs('/var/www/html/')
+            with open('/var/www/html/index.html', 'w') as index:
+                index.write("<html><head></head><body><h1>It works!</h1></body></html>")
 
 
 if __name__ == '__main__':
