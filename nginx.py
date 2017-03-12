@@ -23,16 +23,15 @@ class NginxManager(object):
         if os.path.isdir(self.folder) and os.path.exists(os.path.join(self.folder, 'nginx.conf')):
             return False
 
-        # Create configuration folder
-        os.makedirs(self.folder)
-
         # Copy default configuration files
-        copytree(os.path.join(os.path.dirname(os.path.realpath(__file__)), ['..', 'nginx']), self.folder)
+        if not os.path.isdir(self.folder):
+            copytree(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'nginx'), self.folder)
 
         # Setup the nginx container
         try:
             docker.containers.run(
-                self.container,
+                'nginx',
+                name=self.container,
                 stdout=True,
                 stderr=True,
                 detach=True,
@@ -45,9 +44,24 @@ class NginxManager(object):
                 }
             )
         except (ContainerError, APIError):
-            logging.getLogger().error('Can not setup Docker container')
+            logging.getLogger('manager').error('Can not setup Docker container')
             raise
 
-    def add_host(self):
+    def add_host(self, domain, docker_container_name, docker_port, app_name, use_ssl=True):
+        if use_ssl:
+            model = os.path.join(
+                os.path.dirname(os.path.realpath(__file__)),
+                'nginx_templates/443-preauthorization-host.conf'
+            )
+        else:
+            model = os.path.join(
+                os.path.dirname(os.path.realpath(__file__)),
+                'nginx_templates/80-host.conf'
+            )
+
         with open('data.txt', 'r') as myfile:
             data = myfile.read().replace('\n', '')
+
+    def _write_conf(self, name, source, **args):
+        pass
+

@@ -10,14 +10,13 @@ Options:
   --version     Show version.
 
 """
-import os
 import logging
-from logging import StreamHandler
-
+import os
 import sys
+
 from docopt import docopt
 
-from . import nginx
+import nginx
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)

@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-BASEDIR=`dirname $0`
+BASEDIR=`dirname $0`/..
 
 if [ ! -d "$BASEDIR/.venv" ]; then
     virtualenv -p python3 $BASEDIR/.venv
@@ -9,7 +9,7 @@ fi
 
 source $BASEDIR/.venv/bin/activate
 cd $BASEDIR
-export PYTHONPATH=.
+export PYTHONPATH=$BASEDIR
 
 if [ ! -f "$BASEDIR/.venv/updated" -o $BASEDIR/requirements.txt -nt $BASEDIR/.venv/updated ]; then
     echo "# Installing requirements ..."
@@ -19,4 +19,5 @@ if [ ! -f "$BASEDIR/.venv/updated" -o $BASEDIR/requirements.txt -nt $BASEDIR/.ve
     echo "# Requirements installed."
 fi
 
+cd $BASEDIR
 python manager.py "$@"
