@@ -17,6 +17,8 @@ from logging import StreamHandler
 import sys
 from docopt import docopt
 
+from . import nginx
+
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
@@ -43,6 +45,7 @@ class Manager(object):
     @staticmethod
     def setup(domain):
         logger.info("Setup a new managed server {}".format(domain))
+        nginx_manager = nginx.NginxManager()
 
 
 if __name__ == '__main__':

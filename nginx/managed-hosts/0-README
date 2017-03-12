@@ -1,0 +1,2 @@
+You can create .conf files in this fold that should be loaded to NGinx,
+Take care you are not overriding a managed-host
